@@ -44,7 +44,7 @@ public class jClient
         T = (long) period;
         try {
 
-            MongoClientOptions options = MongoClientOptions.builder()
+/*            MongoClientOptions options = MongoClientOptions.builder()
                     .retryWrites(true)
                     .writeConcern(WriteConcern.MAJORITY)
                     .applicationName("jClient")
@@ -57,10 +57,10 @@ public class jClient
                     new ServerAddress("localhost", 27020)
                     );
 
-             m_mongoClient = new MongoClient(ServerList, options);
+             m_mongoClient = new MongoClient(ServerList, options);*/
 
              // Alt connection string
-             // m_mongoClient = new MongoClient(new MongoClientURI(conStr));
+             m_mongoClient = new MongoClient(new MongoClientURI(conStr));
 
         }
         catch(Exception e)
