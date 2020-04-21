@@ -1,1 +1,0 @@
-docker run --network host --rm -v $(pwd):/home -w /home maven:3-jdk-8 mvn --quiet compile exec:java -Dexec.mainClass=com.gpi.App -Dexec.args="--uri=mongodb://localhost:27017/?replicaSet=test&retryWrites=true --db=jclient --col=01 --usecase=4"
