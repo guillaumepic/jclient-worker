@@ -1,0 +1,10 @@
+.DS_Store
+.classpath
+.idea/
+.project
+.settings/
+.vscode/
+target/
+*.log
+META-INF/
+*~
