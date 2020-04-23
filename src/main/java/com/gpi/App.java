@@ -41,8 +41,8 @@ public class App {
         mode.setRequired(false);
         options.addOption(mode);
 
-        String header = "Options, flags and arguments may be in any order";
-        String footer = "This is work in progress around MongoDB client workers.\n GPI March 2020\n";
+        String header = "Option arguments may be in any order";
+        String footer = "This is work in progress around MongoDB client workers.\n";
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp("jClient", header, options, footer, true);
 
