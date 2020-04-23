@@ -76,7 +76,6 @@ public class jClientRSreporter extends jClientGeneric implements Runnable {
                 .append(logAttribute("hidden", getBooleanValue(memberDocument, "hidden")))
                 .append(logAttribute("slaveDelay", getNumericValue(memberDocument, "slaveDelay")));
         logger.info(stringBuilder.toString());
-
         updateDetectedVotes(memberDocument);
     }
 

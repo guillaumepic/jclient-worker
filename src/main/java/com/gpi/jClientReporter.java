@@ -1,7 +1,6 @@
 package com.gpi;
 
 import com.mongodb.MongoClient;
-import com.mongodb.WriteConcern;
 import com.mongodb.client.MongoDatabase;
 import org.apache.log4j.Logger;
 import org.bson.Document;
@@ -21,7 +20,6 @@ public class jClientReporter extends jClientGeneric implements Runnable {
 
     jClientReporter(MongoClient mc, String dbName, String colName) {
         super(mc, dbName, colName);
-
         db = m_mongoCli.getDatabase(m_db);
     }
 
@@ -37,7 +35,6 @@ public class jClientReporter extends jClientGeneric implements Runnable {
                 .append(" | size - " + collStatsResults.get("size"))
                 .append(" | count - " + collStatsResults.get("count"))
                 .append(" | storageSize - " + collStatsResults.get("storageSize"));
-        System.out.println(printStatus.toString());
         logger.info(printStatus.toString());
     }
 
@@ -56,6 +53,6 @@ public class jClientReporter extends jClientGeneric implements Runnable {
      * Output a final summary
      */
     public void finalReport() {
-        System.out.println("Finalize jClientReporter()");
+        logger.info("Finalize jClientReporter()");
     }
 }

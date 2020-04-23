@@ -2,7 +2,6 @@ package com.gpi;
 
 import com.mongodb.MongoClient;
 import com.mongodb.WriteConcern;
-import com.mongodb.client.MongoDatabase;
 
 import java.util.Date;
 

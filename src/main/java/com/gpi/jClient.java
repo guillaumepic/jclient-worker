@@ -1,19 +1,15 @@
 package com.gpi;
 
-import com.mongodb.*;
-import com.mongodb.client.MongoCollection;
+import com.mongodb.MongoClient;
+import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.result.UpdateResult;
-import com.mongodb.connection.Server;
-import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.json.JsonWriterSettings;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.*;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -22,7 +18,7 @@ import static com.mongodb.client.model.Updates.set;
 
 /**
  * jClient
- *
+ * Main class lancher for the worker pools
  */
 public class jClient
 {
@@ -34,43 +30,18 @@ public class jClient
     static long T = 10;
     private static int count=0;
 
+    private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(jClient.class);
     JsonWriterSettings prettyPrint = JsonWriterSettings.builder().indent(true).build();
 
     jClient(String conStr, String dbStr, String colStr, int period){
 
-        System.out.println( "jClient Constructor connection string: " + conStr );
+        logger.info( "jClient connection string: " + conStr );
         m_db = dbStr;
         m_col = colStr;
         T = (long) period;
         try {
-
-<<<<<<< HEAD
-           /* MongoClientOptions options = MongoClientOptions.builder()
-=======
-/*            MongoClientOptions options = MongoClientOptions.builder()
->>>>>>> origin/master
-                    .retryWrites(true)
-                    .writeConcern(WriteConcern.MAJORITY)
-                    .applicationName("jClient")
-                    .requiredReplicaSetName("rsjunk")
-                    .build();
-
-            List<ServerAddress> ServerList = Arrays.asList(new ServerAddress("localhost", 27017),
-                    new ServerAddress("localhost", 27018),
-                    new ServerAddress("localhost", 27019),
-                    new ServerAddress("localhost", 27020)
-                    );
-
-<<<<<<< HEAD
-             m_mongoClient = new MongoClient(ServerList, options);
-*/
-=======
-             m_mongoClient = new MongoClient(ServerList, options);*/
-
->>>>>>> origin/master
              // Alt connection string
              m_mongoClient = new MongoClient(new MongoClientURI(conStr));
-
         }
         catch(Exception e)
             {
@@ -78,11 +49,17 @@ public class jClient
             }
     }
 
+    /**
+     * Dummy method to create an existing, clean with a session document
+     * * @param
+     */
     public void initSession() {
         try {
             MongoDatabase db = m_mongoClient.getDatabase(m_db);
+
             // Clean up collection
             db.getCollection(m_col).drop();
+
             // Create session entry
             Bson sessionFilter = eq("session", new String("jclient"));
             Bson sessionUpdate = combine( set("date", new Date()), set("junk", new String("Now there is one")));
@@ -90,44 +67,43 @@ public class jClient
                     sessionUpdate,
                     new UpdateOptions().upsert(true));
 
-            System.out.println(db.getCollection(m_col).find(sessionFilter).first().toJson(prettyPrint));
-            System.out.println("InitSession .... ");
+            logger.debug("Init JsonDocument document: " +
+                    db.getCollection(m_col).find(sessionFilter).first().toJson(prettyPrint));
 
         } catch (Exception e) {
-            System.out.print("Exception during Update error : ");
+            logger.error("Exception during session init: ");
             e.printStackTrace();
         }
     }
 
-    public void runWorkers(){
+    /**
+     * Change data capture scenario
+     * Work on resumeAfter() and token persisting solution
+     */
+    public void runCDCReporters(){
         
-        // Using a thread pool we keep filled
-        ExecutorService poolExecutor = Executors.newFixedThreadPool(m_threadCount);
-        int threadIdStart = 4346; // complete rand
-        System.out.println("threadIdStart="+threadIdStart);
-        ArrayList<jClientWorker> workforce = new ArrayList<jClientWorker>();
-        for (int i = threadIdStart; i < (m_threadCount + threadIdStart); i++) {
-            System.out.println("Creating worker " + i);
-            workforce.add(new jClientWorker( m_mongoClient, m_db, m_col, i));    
-        }
-        for (jClientWorker w : workforce) {
+        // Pool Executor
+        ExecutorService poolExecutor = Executors.newFixedThreadPool(1);
+        ArrayList<jClientGeneric> workforce = new ArrayList<>();
+        workforce.add(new jClientWatcher( m_mongoClient, m_db, m_col));
+        for (jClientGeneric w : workforce) {
             poolExecutor.execute(w);
         }
         poolExecutor.shutdown();
         try {
             poolExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            System.out.println("All Threads Complete: ... ");
+            logger.info("All Threads Complete: ... ");
         } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+            logger.error("Await termination exception :" +  e.getMessage());
         } 
     }
 
+    /**
+     * CollStats & rs.status() example - single shoot
+     */
     public void runReporters(){
 
-        // Using a thread pool we keep filled
         ExecutorService poolExecutor = Executors.newFixedThreadPool(m_threadCount);
-        int threadIdStart = 4346; // complete rand
-
         ArrayList<jClientGeneric> workforce = new ArrayList<jClientGeneric>();
 
         workforce.add(new jClientReporter( m_mongoClient, m_db, m_col));
@@ -139,17 +115,18 @@ public class jClient
         poolExecutor.shutdown();
         try {
             poolExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            System.out.println("All Threads Complete: ... ");
+            logger.info("All Threads Complete: ... ");
         } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+            logger.error("Await termination exception :" +  e.getMessage());
         }
     }
 
+    /**
+     * Periodic monitor for collStats and rs.Status()
+     */
     public void runScheduledReporters(){
 
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(m_threadCount);
-        int threadIdStart = 4346; // complete rand
-
         jClientReporter task1 = new jClientReporter(m_mongoClient, m_db, m_col);
         executor.scheduleAtFixedRate(task1, 2, 2, TimeUnit.SECONDS);
 
@@ -158,50 +135,53 @@ public class jClient
 
         try {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            System.out.println("All Threads Complete: ... ");
+            logger.info("All Threads Complete: ... ");
         } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+            logger.error("Await termination exception :" +  e.getMessage());
         }
     }
 
+    /**
+     * Periodic collStats
+     */
     public void runReporter(){
 
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
         jClientReporter reporter = new jClientReporter(m_mongoClient, m_db, m_col);
         ScheduledFuture<?> scheduledFuture = executor.scheduleAtFixedRate(reporter, 2, 2, TimeUnit.SECONDS);
-        System.out.println("executor is up ... ");
         try {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            System.out.println("All Threads Complete: ... ");
+            logger.info("All Threads Complete: ... ");
         } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+            logger.error("Await termination exception :" +  e.getMessage());
         }
     }
 
+    /**
+     * Periodic rs.status()
+     */
     public void runRSReporter(){
 
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
         jClientRSreporter reporter = new jClientRSreporter(m_mongoClient, m_db, m_col);
         ScheduledFuture<?> scheduledFuture = executor.scheduleAtFixedRate(reporter, 2, 2, TimeUnit.SECONDS);
 
-        System.out.println("executor is up ... ");
         try {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-            System.out.println("All Threads Complete: ... ");
+            logger.info("All Threads Complete: ... ");
         } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+            logger.error("Await termination exception :" +  e.getMessage());
         }
-
     }
 
     protected void finalize () throws Throwable  {
-        System.out.println( "jClient Finalize : -- ");
+        logger.info( "jClient Finalize : -- ");
         if (m_mongoClient != null){
-            System.out.println( "jClient close connector : -- ");
+            logger.info( "jClient close connector : -- ");
             // m_mongoClient.close();
             m_mongoClient = null;
             if (m_mongoClient == null)
-                System.out.println( "jClient connector is not referenced.");
+                logger.info( "jClient connector is not referenced.");
         }
 //        super.finalize( );  
     }       

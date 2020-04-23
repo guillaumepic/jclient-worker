@@ -1,32 +1,27 @@
 package com.gpi;
 
-import com.mongodb.Block;
 import com.mongodb.MongoClient;
-import com.mongodb.MongoClientURI;
 import com.mongodb.client.*;
-import com.mongodb.client.model.*;
-import com.mongodb.client.model.changestream.FullDocument;
-import com.mongodb.client.model.changestream.ChangeStreamDocument;
-import org.apache.log4j.Logger;
-import org.bson.*;
-import org.bson.types.ObjectId;
+import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
-import static com.mongodb.client.model.Filters.*;
-import static com.mongodb.client.model.Updates.*;
-import com.mongodb.client.model.UpdateOptions;
-import com.mongodb.client.result.*;
+import com.mongodb.client.model.FindOneAndReplaceOptions;
+import com.mongodb.client.model.changestream.ChangeStreamDocument;
+import com.mongodb.client.model.changestream.FullDocument;
+import org.apache.log4j.Logger;
+import org.bson.BsonDocument;
+import org.bson.BsonObjectId;
 import org.bson.Document;
-import org.bson.types.ObjectId;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Date;
+import java.util.UUID;
 
-import static com.mongodb.client.model.Projections.excludeId;
-import static java.util.Arrays.asList;
 import static com.mongodb.client.model.Filters.eq;
-
-
+import static com.mongodb.client.model.Projections.excludeId;
+import static com.mongodb.client.model.Updates.combine;
+import static com.mongodb.client.model.Updates.set;
+import static java.util.Arrays.asList;
 
 public class jClientWatcher extends jClientGeneric implements Runnable {
 
@@ -55,7 +50,7 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
     }
 
     /**
-     * Foo logEvent function
+     * Dummy logEvent function
      */
     private void logEvent() {
 

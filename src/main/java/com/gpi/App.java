@@ -1,16 +1,17 @@
 package com.gpi;
 
 import org.apache.commons.cli.*;
-import java.util.logging.Logger;
 
 /**
- * Hello !
+ * Dummy app utility to test various worker pool scenario
+ * monitor rs.status(), collstats
+ * Change streams
+ * ...
  */
 
 public class App {
 
-    Logger logger;
-    //private static int count=0;
+    private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(App.class);
 
     public static void main(String[] args) throws InterruptedException  {
 
@@ -40,8 +41,8 @@ public class App {
         mode.setRequired(false);
         options.addOption(mode);
 
-        String header = "              Options, flags and arguments may be in any order";
-        String footer = "This is work in progress around MongoDB injection workload.\n GPI March 2020\n";
+        String header = "Options, flags and arguments may be in any order";
+        String footer = "This is work in progress around MongoDB client workers.\n GPI March 2020\n";
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp("jClient", header, options, footer, true);
 
@@ -49,6 +50,7 @@ public class App {
         int uc = 0;
         String db = "jdb", col = "jcol";
         boolean periodic = false;
+        boolean go = true;
         int Period = 10;
         CommandLine commandLine;
         CommandLineParser parser = new DefaultParser();
@@ -57,77 +59,74 @@ public class App {
         try {
             commandLine = parser.parse(options, args);
             if (commandLine.hasOption("u")) {
-                System.out.print("Option u is present.  The value is: ");
                 connectionURI = commandLine.getOptionValue("u");
-                System.out.println(connectionURI + "\n");
+                logger.info("Option u is present.  The value is: " + connectionURI);
             } else {
-                System.out.print("Option u is not present\n");
-                formatter.printHelp("utility-name", options);
-                System.exit(1);
+                logger.warn("Option u is not present ... but required");
+                go = false;
             }
 
             if (commandLine.hasOption("uc")) {
-                System.out.print("Option uc is present.  The value is: ");
                 uc = Integer.parseInt(commandLine.getOptionValue("uc"));
-                System.out.println("Scenario is " + commandLine.getOptionValue("uc") +"\n");
+                logger.info("Option uc is present.  The use case is: " + commandLine.getOptionValue("uc") );
             } else {
-                System.out.print("Option Scenario is not present\n");
-                formatter.printHelp("utility-name", options);
-                System.exit(1);
+                System.out.print("Option Scenario is not present");
+                go = false;
             }
 
             if (commandLine.hasOption("d")) {
-                System.out.print("Option d is present.  The value is: ");
                 db = commandLine.getOptionValue("d");
-                System.out.println(db + "\n");
+                logger.info("Option database name is: " + db);
             }
 
             if (commandLine.hasOption("c")) {
-                System.out.print("Option c is present.  The value is: ");
                 col = commandLine.getOptionValue("c");
-                System.out.println(col + "\n");
+                logger.info("option collection name is: " + col);
             }
 
             if (commandLine.hasOption("p")) {
-                System.out.print("Option p is present. Periodic mode ");
-                periodic = true;
                 Period = Integer.parseInt(commandLine.getOptionValue("p"));
+                logger.info("Option Period (unused) is : " + Period);
             }
 
         } catch (ParseException exception) {
-            System.out.print("Parse error: ");
-            System.out.println(exception.getMessage());
+            logger.error("Parse error: "+ exception.getMessage() );
             formatter.printHelp("utility-name", options);
-            System.exit(1);
+            System.exit(0);
         }
 
-        // Enable MongoDB logging in general
-        System.setProperty("DEBUG.MONGO", "true");
-        // Enable DB operation tracing
-        System.setProperty("DB.TRACE", "true");
+        // Missing args
+        if (!go) {
+            formatter.printHelp("utility-name", options);
+            System.exit(0);
+        }
 
-        //
-        System.out.print("Build jclient  \n");
+        // Switch use case
+        logger.info("Build jclient");
         jClient o_jClient = new jClient(connectionURI, db, col, Period);
-        o_jClient.initSession();
-        System.out.print("Build jclient initSession()  \n");
         switch (uc) {
             case 1:
-                System.out.print("Build jclient reporter (collstats): \n");
+                logger.warn("Build single jclient reporter ie, doing db.runCommand({collstats:1})");
                 o_jClient.runReporter();
             case 2:
-                System.out.print("Build jclient RS reporter (rsstatus): \n");
+                logger.info("Build single jclient RS reporter ie, periodic task running rs.status()");
+                o_jClient.initSession();
                 o_jClient.runRSReporter();
             case 3:
-                System.out.print("Build jclient reporter task force: \n");
+                logger.info("Build jclient reporters status/collstats in parallel. One shoot");
+                o_jClient.initSession();
                 o_jClient.runReporters();
             case 4:
-                System.out.print("Build scheduled jclient reporter task force: \n");
+                logger.info("Build jclient reporters status/collstats in parallel. Periodic");
+                o_jClient.initSession();
                 o_jClient.runScheduledReporters();
+            case 5:
+                System.out.print("Build scheduled jclient watcher ie, open change stream with token mgt");
+                o_jClient.runCDCReporters();
             default:
                 System.out.print("Ciao jClient !! \n");
         }
 
-        //System.runFinalizersOnExit(true);
+        System.runFinalizersOnExit(true);
     }
 }
