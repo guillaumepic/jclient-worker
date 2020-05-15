@@ -56,19 +56,9 @@ public class jClient
     public void initSession() {
         try {
             MongoDatabase db = m_mongoClient.getDatabase(m_db);
-
             // Clean up collection
             db.getCollection(m_col).drop();
-
-            // Create session entry
-            Bson sessionFilter = eq("session", new String("jclient"));
-            Bson sessionUpdate = combine( set("date", new Date()), set("junk", new String("Now there is one")));
-            UpdateResult res =  db.getCollection(m_col).updateOne(sessionFilter,
-                    sessionUpdate,
-                    new UpdateOptions().upsert(true));
-
-            logger.debug("Init JsonDocument document: " +
-                    db.getCollection(m_col).find(sessionFilter).first().toJson(prettyPrint));
+            db.createCollection(m_col);
 
         } catch (Exception e) {
             logger.error("Exception during session init: ");
@@ -79,13 +69,15 @@ public class jClient
     /**
      * Change data capture scenario
      * Work on resumeAfter() and token persisting solution
+     * // @param rangeId Set entry range intervall for multiple range watcher (based on _id of the DocumentKey)
      */
     public void runCDCReporters(){
         
         // Pool Executor
-        ExecutorService poolExecutor = Executors.newFixedThreadPool(1);
+        ExecutorService poolExecutor = Executors.newFixedThreadPool(2);
         ArrayList<jClientGeneric> workforce = new ArrayList<>();
-        workforce.add(new jClientWatcher( m_mongoClient, m_db, m_col));
+        workforce.add(new jClientWatcher( m_mongoClient, m_db, m_col, 0));
+        workforce.add(new jClientWatcher( m_mongoClient, m_db, m_col, 1000));
         for (jClientGeneric w : workforce) {
             poolExecutor.execute(w);
         }

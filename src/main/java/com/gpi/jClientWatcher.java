@@ -2,15 +2,16 @@ package com.gpi;
 
 import com.mongodb.MongoClient;
 import com.mongodb.client.*;
-import com.mongodb.client.model.Aggregates;
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.FindOneAndReplaceOptions;
+import com.mongodb.client.model.*;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import com.mongodb.client.model.changestream.FullDocument;
+import com.mongodb.client.model.changestream.OperationType;
 import org.apache.log4j.Logger;
 import org.bson.BsonDocument;
+import org.bson.BsonNumber;
 import org.bson.BsonObjectId;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -29,39 +30,29 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
     private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss,SSSZ");
     private static final String DEFAULT_VALUE = "UNKNOWN";
     private static final String MEMBERS = "members";
+    private static final int IntervalRange = 1000;
 
     private MongoDatabase db;
     private MongoCollection<Document> col;
-    private String m_colTokens;
-
+    private String m_colTokens, m_colPricing;
+    private int m_rangeId;
     private String m_uuid;
 
-    jClientWatcher(MongoClient mc, String dbName, String colName) {
+    jClientWatcher(MongoClient mc, String dbName, String colName, int rangeId) {
         super(mc, dbName, colName);
 
         db = m_mongoCli.getDatabase(m_db);
         col = db.getCollection(m_col);
 
+        // Collection name persisting effective pricing
+        m_colPricing = m_col + "_updated";
         // Collection name persisting event change token that are processed
         m_colTokens = m_col + "_token";
         // Initiate unique id for token entry
         m_uuid = getExistingWatcher();
         logger.debug("Associated UUID: " + m_uuid);
-    }
-
-    /**
-     * Dummy logEvent function
-     */
-    private void logEvent() {
-
-        Document collStatsResults = db.runCommand(new Document("collStats", m_col));
-
-        DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-        Date date = new Date();
-        StringBuilder printStatus = new StringBuilder()
-                .append("jclient Watcher log event at " + dateFormat.format(date));
-        System.out.println(printStatus.toString());
-        logger.info(printStatus.toString());
+        // Dummy partitioning watcher ID
+        m_rangeId = rangeId;
     }
 
     /**
@@ -101,17 +92,37 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
      */
     protected void storeResumeToken(BsonDocument resumeToken) {
         MongoCollection<BsonDocument> collection = db.getCollection(m_colTokens, BsonDocument.class);
-        FindOneAndReplaceOptions opt = new FindOneAndReplaceOptions().upsert(true);
-        collection.findOneAndReplace(eq("_id", this.m_uuid), resumeToken, opt);
+        // FindOneAndReplaceOptions opt = new FindOneAndReplaceOptions().upsert(true);
+        // collection.findOneAndReplace(eq("_id", this.m_uuid), resumeToken, opt);
+        ReplaceOptions opt = new ReplaceOptions().upsert(true);
+        collection.replaceOne(  eq("_id", this.m_uuid), resumeToken, opt);
     }
 
     /**
-     * Foo update to validate event process
-     * @param id
+     * Foo update to init offer status
+     * @param offerId
+     *
      */
-    protected void updateEntry(BsonObjectId id) {
+    protected void setPricingEntry(BsonNumber offerId) {
         try {
-            col.updateOne(eq("_id", id), combine(set("checked", true)));
+            MongoCollection<Document> collection = db.getCollection(m_colPricing);
+            Bson offerEntry = combine( set("dateStatus", new Date()), set("status", new String("Pending")));
+            collection.updateOne(eq("offerId", offerId), offerEntry, new UpdateOptions().upsert(true));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Foo update to validate offer status
+     * @param offerId
+     */
+    protected void updatePricingEntry(BsonNumber offerId) {
+        try {
+            MongoCollection<BsonDocument> collection = db.getCollection(m_colPricing, BsonDocument.class);
+            Bson offerFilter = combine( eq("offerId",offerId), eq("status", new String("Pending")));
+            Bson offerUpdate = combine( set("dateEffective", new Date()), set("status", new String("Effective")));
+            collection.updateOne(offerFilter, offerUpdate);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -127,31 +138,44 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
         try {
             ChangeStreamIterable<Document> watchCursor = null;
             BsonDocument resumeToken = getResumeToken();
+            // Note : Range are used to assign specific watcher to specific _id range
+            Bson filter = Filters.and(
+                    Filters.in("operationType", asList("insert", "delete", "update")),
+                    Filters.gte("documentKey._id",m_rangeId),
+                    Filters.lt("documentKey._id",m_rangeId + IntervalRange));
+            watchCursor = col.watch(asList(Aggregates.match(filter)));
             if (resumeToken!= null) {
                 logger.info("Watcher resume token is : " + resumeToken.toString());
-                watchCursor = col.watch(asList(Aggregates.match(Filters.in("operationType", asList("insert", "delete")))))
-                        .resumeAfter(resumeToken);
+                watchCursor.resumeAfter(resumeToken);
             }
             else {
                 logger.info("Watcher resume token is null ");
-                watchCursor = col.watch(asList(Aggregates.match(Filters.in("operationType", asList("insert", "delete")))));
             }
 
-            // watchCursor.maxAwaitTime(maxWaitTime, TimeUnit.MILLISECONDS);
-            // watchCursor.batchSize(defaultBatchSize);
-            // watchCursor.startAtOperationTime(new BsonTimestamp(System.currentTimeMillis()-250));
-            watchCursor.fullDocument(true ? FullDocument.UPDATE_LOOKUP : FullDocument.DEFAULT);
+            // watchCursor.maxAwaitTime(maxWaitTime, TimeUnit.MILLISECONDS); // Testing-scaling
+            // watchCursor.batchSize(defaultBatchSize); // Testing-scaling
+            // watchCursor.startAtOperationTime(new BsonTimestamp(System.currentTimeMillis()-250)); // alternative resume strategy
+            watchCursor.fullDocument(true ? FullDocument.UPDATE_LOOKUP : FullDocument.DEFAULT); // warning full document
 
             MongoCursor<ChangeStreamDocument<Document>> iterator = watchCursor.iterator();
             long start = System.currentTimeMillis();
             while (iterator.hasNext()) {
-                logEvent();
                 ChangeStreamDocument<Document> doc = iterator.next();
-                logger.info("Watcher oplog content on insert: " + doc.getDocumentKey().toString());
-                logger.info("Watcher fulldocument content ont insert: " + doc.getFullDocument().toString());
                 logger.info("Watcher processed event resumeToken: " + doc.getResumeToken());
-                updateEntry(doc.getDocumentKey().getObjectId("_id")); // Assume idempotency for the last update. In case of watch interruption this last update may be applied twice.
-                storeResumeToken(doc.getResumeToken());
+                logger.info("Watcher oplog content: " + doc.getDocumentKey().toString());
+                if (doc.getOperationType() == OperationType.INSERT || doc.getOperationType() == OperationType.UPDATE ) {
+                    logger.info("Watcher fulldocument content on insert: " + doc.getFullDocument().toString());
+                    setPricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
+                    storeResumeToken(doc.getResumeToken());
+                }
+                else if (doc.getOperationType() == OperationType.DELETE) {
+                    logger.info("Watcher oplog on delete ");
+                    updatePricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
+                    storeResumeToken(doc.getResumeToken());
+                }
+                else{
+                    logger.info("Watcher do nothing here ... ");
+                }
             }
             iterator.close();
             logger.info("iterator empty");
