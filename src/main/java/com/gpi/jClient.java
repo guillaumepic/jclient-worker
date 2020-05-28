@@ -1,24 +1,18 @@
 package com.gpi;
 
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientURI;
-import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.UpdateOptions;
-import com.mongodb.client.result.UpdateResult;
-import org.bson.conversions.Bson;
+import com.mongodb.ConnectionString;
+import com.mongodb.MongoClientSettings;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import org.bson.json.JsonWriterSettings;
+import uk.dioxic.mgenerate.core.codec.MgenDocumentCodec;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.concurrent.*;
-
-import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.combine;
-import static com.mongodb.client.model.Updates.set;
 
 /**
  * jClient
- * Main class lancher for the worker pools
+ * Main class launcher for the worker pools
  */
 public class jClient
 {
@@ -33,15 +27,28 @@ public class jClient
     private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(jClient.class);
     JsonWriterSettings prettyPrint = JsonWriterSettings.builder().indent(true).build();
 
-    jClient(String conStr, String dbStr, String colStr, int period){
+    jClient(String conStr, String dbStr, String colStr, Boolean useCR, Boolean cleanup, int period){
 
         logger.info( "jClient connection string: " + conStr );
         m_db = dbStr;
         m_col = colStr;
         T = (long) period;
         try {
-             // Alt connection string
-             m_mongoClient = new MongoClient(new MongoClientURI(conStr));
+            MongoClientSettings clientSettings;
+            if (useCR) {
+                clientSettings = MongoClientSettings.builder()
+                        .applyConnectionString(new ConnectionString(conStr))
+                        .codecRegistry(MgenDocumentCodec.getCodecRegistry())
+                        .build();
+            }
+            else {
+
+                clientSettings = MongoClientSettings.builder()
+                        .applyConnectionString(new ConnectionString(conStr))
+                        .build();
+             }
+            m_mongoClient = MongoClients.create(clientSettings);
+            initSession(cleanup);
         }
         catch(Exception e)
             {
@@ -53,13 +60,16 @@ public class jClient
      * Dummy method to create an existing, clean with a session document
      * * @param
      */
-    public void initSession() {
+    public void initSession(boolean cleanup) {
         try {
-            MongoDatabase db = m_mongoClient.getDatabase(m_db);
-            // Clean up collection
-            db.getCollection(m_col).drop();
-            db.createCollection(m_col);
-
+            if (cleanup) {
+                m_mongoClient.getDatabase(m_db).getCollection(m_col).drop();
+            }
+            // If empty collection then create one (collstats exception)
+            if (! m_mongoClient.getDatabase(m_db).listCollectionNames()
+                    .into(new ArrayList<String>()).contains(m_col)) {
+                m_mongoClient.getDatabase(m_db).createCollection(m_col);
+            }
         } catch (Exception e) {
             logger.error("Exception during session init: ");
             e.printStackTrace();
@@ -91,6 +101,33 @@ public class jClient
     }
 
     /**
+     * mgenerate example - single shoot
+     */
+    public void runWorkerOnce(String jsonModel){
+
+        ExecutorService poolExecutor = Executors.newFixedThreadPool(1);
+        ArrayList<jClientGeneric> workforce = new ArrayList<jClientGeneric>();
+
+        jClientWorker wkr = new jClientWorker( m_mongoClient, m_db, m_col,jsonModel);
+        if (wkr.get_isUp()) {
+            workforce.add(wkr);
+        }
+        else return;
+
+        for (jClientGeneric w : workforce) {
+            poolExecutor.execute(w);
+        }
+        poolExecutor.shutdown();
+        try {
+            poolExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+            logger.info("All Threads Complete: ... ");
+        } catch (InterruptedException e) {
+            logger.error("Await termination exception :" +  e.getMessage());
+        }
+    }
+
+    /**
+     * Case 3
      * CollStats & rs.status() example - single shoot
      */
     public void runReporters(){
@@ -113,6 +150,7 @@ public class jClient
         }
     }
 
+
     /**
      * Periodic monitor for collStats and rs.Status()
      */
@@ -134,12 +172,14 @@ public class jClient
     }
 
     /**
+     * Cas 1
      * Periodic collStats
      */
     public void runReporter(){
 
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
         jClientReporter reporter = new jClientReporter(m_mongoClient, m_db, m_col);
+
         ScheduledFuture<?> scheduledFuture = executor.scheduleAtFixedRate(reporter, 2, 2, TimeUnit.SECONDS);
         try {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
@@ -150,6 +190,7 @@ public class jClient
     }
 
     /**
+     * Case 2
      * Periodic rs.status()
      */
     public void runRSReporter(){

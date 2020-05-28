@@ -1,7 +1,8 @@
 package com.gpi;
 
-import com.mongodb.MongoClient;
+// import com.mongodb.MongoClient;
 import com.mongodb.WriteConcern;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoDatabase;
 import org.bson.*;
 

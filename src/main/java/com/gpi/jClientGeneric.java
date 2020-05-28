@@ -1,7 +1,14 @@
 package com.gpi;
 
-import com.mongodb.MongoClient;
+import com.mongodb.ConnectionString;
+// import com.mongodb.MongoClient;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.WriteConcern;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoCollection;
+import org.bson.codecs.configuration.CodecRegistry;
+import uk.dioxic.mgenerate.core.Template;
+import uk.dioxic.mgenerate.core.codec.MgenDocumentCodec;
 
 import java.util.Date;
 

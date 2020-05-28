@@ -2,6 +2,8 @@ package com.gpi;
 
 import org.apache.commons.cli.*;
 
+import java.util.Locale;
+
 /**
  * Dummy app utility to test various worker pool scenario
  * monitor rs.status(), collstats
@@ -13,7 +15,11 @@ public class App {
 
     private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(App.class);
 
-    public static void main(String[] args) throws InterruptedException  {
+    public static void main(String[] args) throws InterruptedException {
+
+        // Set English/US for compliance with Faker
+        // Locale lang = Locale.getDefault(); // fr_FR
+        Locale.setDefault(new Locale("en", "US"));
 
         Options options = new Options();
 
@@ -21,7 +27,12 @@ public class App {
         uri.setRequired(true);
         options.addOption(uri);
 
-        Option usecase = new Option("uc", "usecase", true, "Use case: 1 - single collection stats 2 - RS status");
+        Option usecase = new Option("uc", "usecase", true, "Use case: 1 - single collection stats 2 - RS status\n" +
+                "Use case 2 - periodic rs.status()\n" +
+                "Use case 3 - periodic rs.status() & runCommand({collstats:mycol})\n" +
+                "Use case 4 - periodic rs.status() & runCommand({collstats:mycol})\n" +
+                "Use case 5 - run dual watchers and manage pending status \n" +
+                "Use case 6 - run (once) an insertMany generating documents against json template");
         usecase.setRequired(false);
         options.addOption(usecase);
 
@@ -37,6 +48,14 @@ public class App {
         collection.setRequired(false);
         options.addOption(collection);
 
+        Option cleanup = new Option("cu", "cleanup", true, "Option to drop working collection. Default is false");
+        cleanup.setRequired(false);
+        options.addOption(cleanup);
+
+        Option jsonModel = new Option("m", "model", true, "Optional file name for template json model used by mgenerate. Default is null");
+        jsonModel.setRequired(false);
+        options.addOption(jsonModel);
+
         Option mode = new Option("p", "periodic", true, "Mode single or peridic");
         mode.setRequired(false);
         options.addOption(mode);
@@ -49,8 +68,9 @@ public class App {
         String connectionURI = null;
         int uc = 0;
         String db = "jdb", col = "jcol";
-        boolean periodic = false;
+        boolean periodic = false, clean = false;
         boolean go = true;
+        String model = null;
         int Period = 10;
         CommandLine commandLine;
         CommandLineParser parser = new DefaultParser();
@@ -68,7 +88,7 @@ public class App {
 
             if (commandLine.hasOption("uc")) {
                 uc = Integer.parseInt(commandLine.getOptionValue("uc"));
-                logger.info("Option uc is present.  The use case is: " + commandLine.getOptionValue("uc") );
+                logger.info("Option uc is present.  The use case is: " + commandLine.getOptionValue("uc"));
             } else {
                 System.out.print("Option Scenario is not present");
                 go = false;
@@ -84,13 +104,23 @@ public class App {
                 logger.info("option collection name is: " + col);
             }
 
+            if (commandLine.hasOption("cu")) {
+                clean = Boolean.parseBoolean(commandLine.getOptionValue("cu"));
+                logger.info("option cleanup is: " + clean);
+            }
+
+            if (commandLine.hasOption("m")) {
+                model = commandLine.getOptionValue("m");
+                logger.info("option json model template is: " + model);
+            }
+
             if (commandLine.hasOption("p")) {
                 Period = Integer.parseInt(commandLine.getOptionValue("p"));
                 logger.info("Option Period (unused) is : " + Period);
             }
 
         } catch (ParseException exception) {
-            logger.error("Parse error: "+ exception.getMessage() );
+            logger.error("Parse error: " + exception.getMessage());
             formatter.printHelp("utility-name", options);
             System.exit(0);
         }
@@ -101,30 +131,40 @@ public class App {
             System.exit(0);
         }
 
-        // Switch use case
-        logger.info("Build jclient");
-        jClient o_jClient = new jClient(connectionURI, db, col, Period);
+        // Main switch case
+        jClient o_jClient;
         switch (uc) {
             case 1:
-                logger.warn("Build single jclient reporter ie, doing db.runCommand({collstats:1})");
+                logger.info("Build single jclient reporter ie, doing db.runCommand({collstats:1}), periodic 2s");
+                o_jClient = new jClient(connectionURI, db, col, false, clean, Period);
                 o_jClient.runReporter();
             case 2:
                 logger.info("Build single jclient RS reporter ie, periodic task running rs.status()");
-                o_jClient.initSession();
+                o_jClient = new jClient(connectionURI, db, col, false, clean, Period);
                 o_jClient.runRSReporter();
             case 3:
-                logger.info("Build jclient reporters status/collstats in parallel. One shoot");
-                o_jClient.initSession();
+                logger.info("Build jclient reporters status/collstats in parallel. (note : is a service executor loop) ");
+                o_jClient = new jClient(connectionURI, db, col, false, clean, Period);
                 o_jClient.runReporters();
             case 4:
                 logger.info("Build jclient reporters status/collstats in parallel. Periodic");
-                o_jClient.initSession();
+                o_jClient = new jClient(connectionURI, db, col, false, clean, Period);
                 o_jClient.runScheduledReporters();
             case 5:
-                System.out.print("Build scheduled jclient watcher ie, open change stream with token mgt");
+                logger.info("Build scheduled jclient watcher ie, open change stream with token mgt");
+                o_jClient = new jClient(connectionURI, db, col, false, clean, Period);
                 o_jClient.runCDCReporters();
+            case 6:
+                logger.info("Build one shot jclient worker: Mgenerate CodecRegistry");
+                if (model == null) {
+                    logger.error("Missing template json model to generate ... Terminating");
+                    formatter.printHelp("utility-name", options);
+                    return;
+                }
+                o_jClient = new jClient(connectionURI, db, col, true, true, Period);
+                o_jClient.runWorkerOnce(model);
             default:
-                System.out.print("Ciao jClient !! \n");
+                logger.info("Ciao jClient !! \n");
         }
 
         System.runFinalizersOnExit(true);

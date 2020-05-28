@@ -1,7 +1,9 @@
 package com.gpi;
 
-import com.mongodb.MongoClient;
+//import com.mongodb.MongoClient;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.MongoIterable;
 import org.apache.log4j.Logger;
 import org.bson.Document;
 
@@ -12,10 +14,6 @@ import java.util.Date;
 public class jClientReporter extends jClientGeneric implements Runnable {
 
     private static final Logger logger = Logger.getLogger(jClientReporter.class);
-    private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss,SSSZ");
-    private static final String DEFAULT_VALUE = "UNKNOWN";
-    private static final String MEMBERS = "members";
-
     private MongoDatabase db;
 
     jClientReporter(MongoClient mc, String dbName, String colName) {

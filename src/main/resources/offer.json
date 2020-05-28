@@ -1,0 +1,72 @@
+{
+    "_id":{"salesChannelRef":{ "$choose": {"from": ["CDS", "AMZ", "ABB", "ABC", "ABD"], "weights": [3, 2, 1, 1, 1] }},"externalOrderRef":"$word"},
+    "partnerChannel":"$word",
+    "taxPosition":"$word",
+    "purchasedOn":"$dt",
+    "totalPrice":"$decimal",
+    "totalPriceWithoutVAT":"$decimal",
+    "salesChannel":{ "$choose": {"from": ["A", "B", "C", "D", "E", "F", "G"], "weights": [3, 2, 1, 2, 1, 4, 6] }},
+    "workFlow":{ "$choose": {"from": ["wkfw00", "wkfw01", "wkfw02"], "weights": [3, 2, 1] }},
+    "currencyCode": { "$choose": {"from": ["EUR", "DOLLAR", "YEN"], "weights": [3, 2, 1] }},
+    "shipping":{
+        "lastName":"$first",
+        "firstName":"$last",
+        "companyName":"$word",
+        "addressLine1":{"$string": {"length": 20}},
+        "addressLine2":{"$string": {"length": 10}},
+        "addressLine3":{"$string": {"length": 5}},
+        "postalCode":"$postal",
+        "city":"$city",
+        "countryCode":"$country",
+        "email":"$email",
+        "civility":"$gender"
+    },
+    "billing":{
+        "lastName":"$last",
+        "civility":"$gender",
+        "firstName":"$first",
+        "companyName":"$word",
+        "addressLine1":{"$string": {"length": 20}},
+        "addressLine2":{"$string": {"length": 10}},
+        "addressLine3":{"$string": {"length": 5}},
+        "postalCode":"$postal",
+        "city":"$city",
+        "countryCode":"$country",
+        "email":"$email"
+    },
+    "jClientArray":
+        { "$array": { "of": {
+            "offerId": { "$uuid": "STRING" } ,
+            "quantity":"$int",
+            "seller":{
+                "id":"$int"
+            },
+            "product":{
+                "id": { "$uuid": "STRING" },
+                "label":"$word",
+                "condition":{ "$choose": {"from": ["NEW", "RECYCLED", "OLD"], "weights": [3, 2, 1,] }}
+            },
+            "delivery":{
+                "mode":{ "$choose": {"from": ["MODE00", "MODE01", "MODE02"], "weights": [3, 2, 1,] }},
+                "relayCode": { "$uuid": "STRING" },
+                "shippingMin":"$dt",
+                "shippingMax":"$dt"},
+            "pricing":{
+                "unitSalesPrice":"$decimal",
+                "unitSalesPriceWithoutVAT":"$decimal",
+                "shippingCost":"$decimal",
+                "shippingCostWithoutVAT":"$decimal",
+                "taxes":[
+                    {
+                        "code":{ "$choose": {"from": ["CODE1", "CODE2", "CODE3"], "weights": [3, 2, 1,] }},
+                        "value":"$decimal"
+                    }
+                ]},
+            "errors":{"$string": {"length": 25}}
+        },  "number": {
+                "$integer": { "min": 1, "max": 10 }
+            }}
+        }
+}
+
+
