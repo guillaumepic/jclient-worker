@@ -25,7 +25,7 @@ $ docker run --rm -v "$(pwd)":/home -w /home maven:3-jdk-8 mvn --quiet compile e
 
 #### Using maven 
 ```bash
-$ compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsName&retryWrites=true&w=majority&wtimeoutMS=5000' -d jclient -c example -uc 4"
+$ mvn compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsName&retryWrites=true&w=majority&wtimeoutMS=5000' -d jclient -c example -uc 4"
 ```
 
 ####Jar application
@@ -36,12 +36,12 @@ $ java -jar ./target/jclient-2.0.2-SNAPSHOT-jar-with-dependencies.jar --uri mong
 
 #### Generate insertMany using mgenerate4j;
 ```bash
-$ compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsName&retryWrites=true&w=majority&wtimeoutMS=5000' -d jclient -c example -uc 6 -m offer.json"
+$ mvn compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsName&retryWrites=true&w=majority&wtimeoutMS=5000' -d jclient -c example -uc 6 -m offer.json"
 ```
 
 #### Create dual watcher ( watcher 1: range[0-9999], watcher 2: range[1000-2000]) 
 ```bash
-$ compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsname&retryWrites=true&w=majority&wtimeoutMS=5000' -d referential -c offer -uc 5"
+$ mvn compile exec:java -Dexec.mainClass=com.gpi.App "-Dexec.args=--uri 'mongodb://hostname:27107,...,hostname2:27107/?replicaSet=myrsname&retryWrites=true&w=majority&wtimeoutMS=5000' -d referential -c offer -uc 5"
 ```
 Dummy manual inserts requires offers with an effective date
 ```bash
