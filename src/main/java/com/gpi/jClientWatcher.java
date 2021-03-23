@@ -1,6 +1,9 @@
 package com.gpi;
 
 // import com.mongodb.MongoClient;
+import com.mongodb.ReadConcern;
+import com.mongodb.ReadPreference;
+import com.mongodb.WriteConcern;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
@@ -81,7 +84,9 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
      */
     protected BsonDocument getResumeToken() {
 
-        MongoCollection<BsonDocument> collection = db.getCollection(m_colTokens, BsonDocument.class);
+        MongoCollection<BsonDocument> collection = db.getCollection(m_colTokens, BsonDocument.class)
+                .withReadPreference(ReadPreference.secondary())
+                .withReadConcern(ReadConcern.LOCAL);
         BsonDocument resumeToken = collection.find(eq("_id", this.m_uuid)).projection(excludeId()).first();
         return resumeToken;
     }
@@ -135,52 +140,62 @@ public class jClientWatcher extends jClientGeneric implements Runnable {
     @Override
     public void run() {
 
-        try {
-            ChangeStreamIterable<Document> watchCursor = null;
-            BsonDocument resumeToken = getResumeToken();
-            // Note : Range are used to assign specific watcher to specific _id range
-            Bson filter = Filters.and(
-                    Filters.in("operationType", asList("insert", "delete", "update")),
-                    Filters.gte("documentKey._id",m_rangeId),
-                    Filters.lt("documentKey._id",m_rangeId + IntervalRange));
-            watchCursor = col.watch(asList(Aggregates.match(filter)));
-            if (resumeToken!= null) {
-                logger.info("Watcher resume token is : " + resumeToken.toString());
-                watchCursor.resumeAfter(resumeToken);
-            }
-            else {
-                logger.info("Watcher resume token is null ");
-            }
+        while(true) {
+            try {
+                ChangeStreamIterable<Document> watchCursor = null;
+                BsonDocument resumeToken = getResumeToken();
+                // Note : Range are used to assign specific watcher to specific _id range
+                Bson filter = Filters.and(
+                        Filters.in("operationType", asList("insert", "delete", "update", "replace")),
+                        Filters.gte("documentKey._id", m_rangeId),
+                        Filters.lt("documentKey._id", m_rangeId + IntervalRange));
+                watchCursor = col.watch(asList(Aggregates.match(filter)));
+                if (resumeToken != null) {
+                    logger.info("Watcher resume token is : " + resumeToken.toString());
+                    watchCursor.resumeAfter(resumeToken);
+                    // alternative : watchCursor.startAtOperationTime();
+                } else {
+                    logger.info("Watcher resume token is null ");
+                }
 
-            // watchCursor.maxAwaitTime(maxWaitTime, TimeUnit.MILLISECONDS); // Testing-scaling
-            // watchCursor.batchSize(defaultBatchSize); // Testing-scaling
-            // watchCursor.startAtOperationTime(new BsonTimestamp(System.currentTimeMillis()-250)); // alternative resume strategy
-            watchCursor.fullDocument(true ? FullDocument.UPDATE_LOOKUP : FullDocument.DEFAULT); // warning full document
+                // watchCursor.maxAwaitTime(maxWaitTime, TimeUnit.MILLISECONDS); // Testing-scaling
+                // watchCursor.batchSize(defaultBatchSize); // Testing-scaling
+                // watchCursor.startAtOperationTime(new BsonTimestamp(System.currentTimeMillis()-250)); // alternative resume strategy
+                watchCursor.fullDocument(true ? FullDocument.UPDATE_LOOKUP : FullDocument.DEFAULT); // warning full document
 
-            MongoCursor<ChangeStreamDocument<Document>> iterator = watchCursor.iterator();
-            long start = System.currentTimeMillis();
-            while (iterator.hasNext()) {
-                ChangeStreamDocument<Document> doc = iterator.next();
-                logger.info("Watcher processed event resumeToken: " + doc.getResumeToken());
-                logger.info("Watcher oplog content: " + doc.getDocumentKey().toString());
-                if (doc.getOperationType() == OperationType.INSERT || doc.getOperationType() == OperationType.UPDATE ) {
-                    logger.info("Watcher fulldocument content on insert: " + doc.getFullDocument().toString());
-                    setPricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
-                    storeResumeToken(doc.getResumeToken());
+                MongoCursor<ChangeStreamDocument<Document>> iterator = watchCursor.iterator();
+                long start = System.currentTimeMillis();
+                while (iterator.hasNext()) {
+                    ChangeStreamDocument<Document> doc = iterator.next();
+                    doc.toString();
+                    logger.info("Watcher processed event resumeToken: " + doc.getResumeToken());
+                    logger.info("Watcher oplog content: " + doc.getDocumentKey().toString());
+                    if (doc.getOperationType() == OperationType.INSERT || doc.getOperationType() == OperationType.UPDATE) {
+                        logger.info("Watcher fulldocument content on insert: " + doc.getFullDocument().toString());
+                        setPricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
+                        storeResumeToken(doc.getResumeToken());
+                    } else if (doc.getOperationType() == OperationType.DELETE) {
+                        logger.info("Watcher oplog on delete ");
+                        updatePricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
+                        storeResumeToken(doc.getResumeToken());
+                    } else {
+                        logger.info("Watcher do nothing here ... ");
+                    }
                 }
-                else if (doc.getOperationType() == OperationType.DELETE) {
-                    logger.info("Watcher oplog on delete ");
-                    updatePricingEntry(doc.getDocumentKey().getNumber("_id")); // Warning: ensure idempotent op
-                    storeResumeToken(doc.getResumeToken());
+                iterator.close();
+                logger.info("iterator empty");
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Fatal Error ? => Terminate or resumeToken = null
+                // Transcient Error ? => continue, restart from last token,
+                // Implement back-off period
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException interruptedException) {
+                    interruptedException.printStackTrace();
                 }
-                else{
-                    logger.info("Watcher do nothing here ... ");
-                }
+
             }
-            iterator.close();
-            logger.info("iterator empty");
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 

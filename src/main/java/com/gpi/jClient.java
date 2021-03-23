@@ -1,7 +1,6 @@
 package com.gpi;
 
-import com.mongodb.ConnectionString;
-import com.mongodb.MongoClientSettings;
+import com.mongodb.*;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import org.bson.json.JsonWriterSettings;
@@ -38,6 +37,8 @@ public class jClient
             if (useCR) {
                 clientSettings = MongoClientSettings.builder()
                         .applyConnectionString(new ConnectionString(conStr))
+                        .readConcern(ReadConcern.MAJORITY)
+                        .readPreference(ReadPreference.secondary())
                         .codecRegistry(MgenDocumentCodec.getCodecRegistry())
                         .build();
             }
@@ -54,6 +55,32 @@ public class jClient
             {
                 e.printStackTrace();
             }
+
+
+        try {
+            MongoClientSettings clientSettings;
+            if (useCR) {
+                clientSettings = MongoClientSettings.builder()
+                        .applyConnectionString(new ConnectionString(conStr))
+                        .readConcern(ReadConcern.MAJORITY)
+                        .readPreference(ReadPreference.primaryPreferred())
+                        .retryWrites(true)
+                        .build();
+            }
+            else {
+
+                clientSettings = MongoClientSettings.builder()
+                        .applyConnectionString(new ConnectionString(conStr))
+                        .build();
+            }
+            m_mongoClient = MongoClients.create(clientSettings);
+            initSession(cleanup);
+        }
+        catch(Exception e)
+        {
+            e.printStackTrace();
+        }
+
     }
 
     /**
@@ -108,7 +135,9 @@ public class jClient
         ExecutorService poolExecutor = Executors.newFixedThreadPool(1);
         ArrayList<jClientGeneric> workforce = new ArrayList<jClientGeneric>();
 
-        jClientWorker wkr = new jClientWorker( m_mongoClient, m_db, m_col,jsonModel);
+        logger.info("GPI DEBUGING Complete: ... ");
+
+        jClientWorker wkr = new jClientWorker( m_mongoClient, m_db, m_col, jsonModel);
         if (wkr.get_isUp()) {
             workforce.add(wkr);
         }

@@ -34,7 +34,7 @@
         "countryCode":"$country",
         "email":"$email"
     },
-    "jClientArray":
+    "offerItems":
         { "$array": { "of": {
             "offerId": { "$uuid": "STRING" } ,
             "quantity":"$int",

@@ -161,7 +161,7 @@ public class App {
                     formatter.printHelp("utility-name", options);
                     return;
                 }
-                o_jClient = new jClient(connectionURI, db, col, true, true, Period);
+                o_jClient = new jClient(connectionURI, db, col, true, false, Period);
                 o_jClient.runWorkerOnce(model);
             default:
                 logger.info("Ciao jClient !! \n");
