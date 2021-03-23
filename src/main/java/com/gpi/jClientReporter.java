@@ -55,15 +55,15 @@ public class jClientReporter extends jClientGeneric implements Runnable {
     private void doSomethingCRUD()
     {
         try {
-            logger.info("Dummy CRUD updateOne touch counting : updateOne");
+            logger.info("Dummy CRUD : updateOne touch counting");
             col.updateOne(
                     eq("_id", new String("digiposte")),
                     combine(inc("touchCount", 1),
                             currentDate("lastModified")),
                     new UpdateOptions().upsert(true));
-            logger.info("Dummy CRUD updateOne touch counting : findOneAndDelete");
+            logger.info("Dummy CRUD : findOneAndDelete");
             col.findOneAndDelete(eq("_id","versatile"));
-            logger.info("Dummy CRUD updateOne touch counting : insertOne");
+            logger.info("Dummy CRUD : insertOne");
             col.insertOne(new Document("_id","versatile").append("lastModified", new Date()));
 
         } catch(MongoException e){
